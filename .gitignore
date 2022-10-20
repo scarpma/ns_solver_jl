@@ -3,4 +3,4 @@
 *.vtk
 *.vti
 *.vtu
-
+.ipynb_checkpoints/

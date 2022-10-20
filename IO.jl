@@ -1,4 +1,4 @@
-module io
+module IO
 
 using WriteVTK
 
@@ -16,11 +16,16 @@ function staggeredToNormal(staggered)
 end
 
 
-function writeFieldsToFile(x,y,u,v,p)
-    vtkfile = vtk_grid("my_vtk_file", x, y)
+function writeFieldsToFile(filename::String,x,y,u,v,p)
+    vtkfile = vtk_grid(filename, x, y)
     vtkfile["U"] = vcat(u,v)
     vtkfile["p"] = staggeredToNormal(p)
-    print(size(staggeredToNormal(p)))
+    outfiles = vtk_save(vtkfile)
+end
+
+function writeSingleFieldToFile(filename::String,x,y,p,fieldName::String)
+    vtkfile = vtk_grid(filename, x, y)
+    vtkfile[fieldName] = staggeredToNormal(p)
     outfiles = vtk_save(vtkfile)
 end
 
