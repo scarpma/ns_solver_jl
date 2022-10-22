@@ -1,14 +1,15 @@
 module FiniteDifference
 
-export Field2D
+const DEBUG = true
 
-using BandedMatrices # BandedMatrix
-using BlockBandedMatrices # Fill
-using LazyArrays # Kron
-using LinearAlgebra # I
-
+export Field2D, dassert
 using Plots
 
+## using BandedMatrices # BandedMatrix
+## using BlockBandedMatrices # Fill
+## using LazyArrays # Kron
+## using LinearAlgebra # I
+## 
 ## function laplacian_operator(n, h1, h2)
 ##     # 1d matrix for second order derivative
 ##     D² = BandedMatrix(0 => Fill(-2,n), 1 => Fill(1,n-1), -1 => Fill(1,n-1))
@@ -52,40 +53,113 @@ struct Field2D
     Base.iterate(foo::Field2D, state = 1) = state > fieldcount(Field2D) ? nothing : (getfield(foo, state), state + 1)
 end
 
-function dd1!(u::Field2D, o::Field2D)
+macro dassert(exp)
+    if DEBUG
+        return esc(:(@assert $exp))
+    end
+end
 
-    arr, h1, h2, n1, n2 = u
-    res, h1p, h2p, n1p, n2p = o
-    @assert n1 == n1p
-    @assert n2 == n2p
-    @assert h1 == h1p
-    @assert h2 == h2p
-
-    #res = Array{eltype(arr)}(undef, (n1,n2))
-    
+function dd1!(res, arr, h)
+    n1 = size(arr, 1)
+    n2 = size(arr, 2)
     for j=1:n2
-        res[1,j] = (arr[1,j] -2*arr[2,j] + arr[3,j]) / h1^2
-        res[n1,j] = (arr[n1-2,j] -2*arr[n1-1,j] + arr[n1,j]) / h1^2
+        res[1,j] = (arr[1,j] -2*arr[2,j] + arr[3,j]) / h^2
+        res[n1,j] = (arr[n1-2,j] -2*arr[n1-1,j] + arr[n1,j]) / h^2
     end
     for i=2:n1-1
         for j=1:n2
-            res[i,j] = (arr[i-1,j] -2*arr[i,j] + arr[i+1,j]) / h1^2
+            res[i,j] = (arr[i-1,j] -2*arr[i,j] + arr[i+1,j]) / h^2
+        end
+    end
+    return
+end
+function dd1!(o::Field2D, u::Field2D)
+    arr, h1, h2, n1, n2 = u
+    res, h1p, h2p, n1p, n2p = o
+    @dassert(n1 == n1p)
+    @dassert(n2 == n2p)
+    @dassert(h1 == h1p)
+    @dassert(h2 == h2p)
+    dd1!(res, arr, h1)
+    return
+end
+function dd1!(u::Field2D)
+    arr, h1, h2, n1, n2 = u
+    res = Array{eltype(arr)}(undef, (n1,n2))
+    dd1!(res, arr, h1)
+    return Field2D(res, (h1,h2))
+end
+function dd2!(o::Field2D, u::Field2D)
+    arr, h1, h2, n1, n2 = u
+    res, h1p, h2p, n1p, n2p = o
+    arr = transpose(arr)
+    res = transpose(res)
+    @dassert(n1 == n1p)
+    @dassert(n2 == n2p)
+    @dassert(h1 == h1p)
+    @dassert(h2 == h2p)
+    dd1!(res, arr, h2)
+    return
+end
+## function dd2!(u::Field2D)
+## 
+##     arr, h1, h2, n1, n2 = u
+##     res = Array{eltype(arr)}(undef, (n1,n2))
+##     
+##     dd1!(res, arr, h1)
+##     return Field2D(res, (h1,h2))
+## End
+
+
+## TESTS
+function getTestFunc1(n1,n2)
+    res = Field2D(Float64, (2*pi/n1,2*pi/n2), (n1,n2))
+    i, h1, h2, n1, n2 = res
+    for jj=1:n2
+        for ii=1:n1
+            i[ii,jj] = cos(ii*h1 + jj*h2)
         end
     end
     return res
 end
-
-function test_dd1()
-    f = Field2D(Float64, (0.1,0.1), (100,100))
-    u, h1, h2, n1, n2 = f
-    for j=1:n2
-        for i=1:n1
-            u[i,j] = cos(i*h1 + j*h2)
+function getTestFunc2(n1,n2)
+    res = Field2D(Float64, (2*pi/n1,2*pi/n2), (n1,n2))
+    i, h1, h2, n1, n2 = res
+    for jj=1:n2
+        for ii=1:n1
+            i[ii,jj] = cos(ii*h1) * sin(jj*h2)
         end
     end
-    p1 = heatmap(u, title="u")
-    dd1u = dd1(f)
-    p2 = heatmap(dd1u, title="d11 u")
+    return res
+end
+function test_dd1()
+    n1 = 100
+    n2 = 100
+    input = getTestFunc2(n1,n2)
+    i, h1, h2 = input
+    output = Field2D(Float64, (h1,h2), (n1, n2))
+    o, = output
+
+    p1 = heatmap(i, title="input", aspect_ratio=:equal)
+    dd1!(output, input)
+    p2 = heatmap(o, title="d11 input", aspect_ratio=:equal)
+    p = plot(p1, p2)
+    display(p)
+end
+function test_dd2()
+    n1 = 100
+    n2 = 100
+    input = getTestFunc2(n1,n2)
+    i, h1, h2 = input
+    output = Field2D(Float64, (h1,h2), (n1, n2))
+    o, = output
+
+    o = transpose(o)
+    i = transpose(i)
+
+    p1 = heatmap(i, title="input", aspect_ratio=:equal)
+    dd1!(output, input)
+    p2 = heatmap(o, title="d22 input", aspect_ratio=:equal)
     plot(p1, p2)
     gui()
 end
@@ -116,8 +190,6 @@ function LaplacianTriDiagSolve!(v, d, h) # mutated argument in first position
     end
     return
 end
-
-
 function test_LaplacianTriDiagSolve1()
     n = 10000
     RHS = rand(Float64, (n))

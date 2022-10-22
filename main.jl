@@ -25,6 +25,7 @@ v = Field2D(T, (h1,h2), (n1,n2), 0.)
 p = Field2D(T, (h1,h2), (n1+1,n2+1), 0.)
 
 FiniteDifference.test_dd1()
+#FiniteDifference.test_dd2()
 
 #IO.writeFieldsToFile("prova",x,y,u,v,p)
 #IO.writeSingleFieldToFile("prova_p",xp,yp,p,"p")
