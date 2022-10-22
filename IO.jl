@@ -1,5 +1,5 @@
 module IO
-
+using Printf
 using WriteVTK
 
 function staggeredToNormal(staggered)
@@ -16,7 +16,7 @@ function staggeredToNormal(staggered)
 end
 
 
-function writeFieldsToFile(filename::String,x,y,u,v,p)
+function writeUVPFiedsToFile(filename::String,x,y,u,v,p)
     vtkfile = vtk_grid(filename, x, y)
     vtkfile["U"] = vcat(u,v)
     vtkfile["p"] = staggeredToNormal(p)
@@ -26,6 +26,14 @@ end
 function writeSingleFieldToFile(filename::String,x,y,p,fieldName::String)
     vtkfile = vtk_grid(filename, x, y)
     vtkfile[fieldName] = staggeredToNormal(p)
+    outfiles = vtk_save(vtkfile)
+end
+
+function writeFieldsToFile(filename::String,x,y,fields...)
+    vtkfile = vtk_grid(filename, x, y)
+    for i in eachindex(fields)
+        vtkfile[@sprintf("f%2d",i)] = staggeredToNormal(fields[i])
+    end
     outfiles = vtk_save(vtkfile)
 end
 

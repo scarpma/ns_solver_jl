@@ -4,6 +4,8 @@ const DEBUG = true
 
 export Field2D, dassert
 using Plots
+include("./IO.jl")
+using .IO
 
 ## using BandedMatrices # BandedMatrix
 ## using BlockBandedMatrices # Fill
@@ -73,6 +75,25 @@ function dd1!(res, arr, h)
     end
     return
 end
+function dd2!(res, arr, h)
+    n1 = size(arr, 1)
+    n2 = size(arr, 2)
+    for i=1:n1
+        res[i,1] = (arr[j,1] -2*arr[j,2] + arr[j,3]) / h^2
+        res[i,n2] = (arr[j,n2-2] -2*arr[i,n2-1] + arr[i,n2]) / h^2
+    end
+    for i=2:n1-1
+        for j=1:n2
+            res[i,j] = (arr[i-1,j] -2*arr[i,j] + arr[i+1,j]) / h^2
+        end
+    end
+    for i=2:n1-1
+        for j=1:n2
+            res[i,j] = (arr[i,j-1] -2*arr[i,j] + arr[i,j+1]) / h^2
+        end
+    end
+    return
+end
 function dd1!(o::Field2D, u::Field2D)
     arr, h1, h2, n1, n2 = u
     res, h1p, h2p, n1p, n2p = o
@@ -92,23 +113,19 @@ end
 function dd2!(o::Field2D, u::Field2D)
     arr, h1, h2, n1, n2 = u
     res, h1p, h2p, n1p, n2p = o
-    arr = transpose(arr)
-    res = transpose(res)
     @dassert(n1 == n1p)
     @dassert(n2 == n2p)
     @dassert(h1 == h1p)
     @dassert(h2 == h2p)
-    dd1!(res, arr, h2)
+    dd2(res, arr, h2)
     return
 end
-## function dd2!(u::Field2D)
-## 
-##     arr, h1, h2, n1, n2 = u
-##     res = Array{eltype(arr)}(undef, (n1,n2))
-##     
-##     dd1!(res, arr, h1)
-##     return Field2D(res, (h1,h2))
-## End
+function dd2!(u::Field2D)
+    arr, h1, h2, n1, n2 = u
+    res = Array{eltype(arr)}(undef, (n1,n2))
+    dd2!(res, arr, h2)
+    return Field2D(res, (h1,h2))
+end
 
 
 ## TESTS
@@ -127,24 +144,35 @@ function getTestFunc2(n1,n2)
     i, h1, h2, n1, n2 = res
     for jj=1:n2
         for ii=1:n1
-            i[ii,jj] = cos(ii*h1) * sin(jj*h2)
+            #i[ii,jj] = cos(ii*h1) * sin(jj*h2)
+            i[ii,jj] = (ii*h1)^3 + (jj*h2)^3
         end
     end
-    return res
+    x1 = Array{Float64}(undef, (n1))
+    x2 = Array{Float64}(undef, (n2))
+    for ii=1:n1
+        x1[ii] = ii*h1
+    end
+    for ii=1:n2
+        x2[ii] = ii*h2
+    end
+    return res, x1, x2
 end
 function test_dd1()
     n1 = 100
     n2 = 100
-    input = getTestFunc2(n1,n2)
+    input, x1, x2 = getTestFunc2(n1,n2)
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
     o, = output
 
-    p1 = heatmap(i, title="input", aspect_ratio=:equal)
+    #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     dd1!(output, input)
-    p2 = heatmap(o, title="d11 input", aspect_ratio=:equal)
-    p = plot(p1, p2)
-    display(p)
+    IO.writeFieldsToFile("prova_dd1", x1, x2, input.arr, output.arr)
+    #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    #p = plot(p1, p2)
+    #display(p)
+
 end
 function test_dd2()
     n1 = 100
@@ -153,15 +181,11 @@ function test_dd2()
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
     o, = output
-
-    o = transpose(o)
-    i = transpose(i)
-
-    p1 = heatmap(i, title="input", aspect_ratio=:equal)
-    dd1!(output, input)
-    p2 = heatmap(o, title="d22 input", aspect_ratio=:equal)
-    plot(p1, p2)
-    gui()
+    p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    dd2!(output, input)
+    p2 = heatmap(o, title="d22 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    p = plot(p1, p2)
+    display(p)
 end
 
 function LaplacianTriDiagSolve!(v, d, h) # mutated argument in first position
