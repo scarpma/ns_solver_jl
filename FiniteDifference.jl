@@ -61,12 +61,74 @@ macro dassert(exp)
     end
 end
 
+function d1!(res_field, arr_field)
+    arr, h1, h2, n1, n2 = arr_field
+    res, = res_field
+
+    twice_h1 = 2*h1
+
+    for j=1:n2
+        res[1,j] = (res[1,j] - res[1,j]) / twice_h1
+        res[n1,j] = (res[n1,j] - res[n1,j]) / twice_h1
+    end
+
+    for j=1:n2
+        for i=2:n1-1
+            res[i,j] = (res[i+1,j] - res[i-1,j]) / twice_h1
+        end
+    end
+
+end
+
+function nonLinear1!(H1_field, u1_field, u2_field, d1u1_field, d2u1_field)
+    # compute (non-linear term)_1 = H1 = (u1*d1+u2*d2)u1 = u1*d1u1 + u2*d2u1
+    # compute d1u1 and d2u1
+    d1!(d1u1_field, u1_field)
+    d2!(d2u1_field, u1_field)
+
+    u1, h1, h2, n1, n2 = u1_field
+    u2, = u2_field
+    H1, = H1_field
+    d1u1, = d1u1_field
+    d2u1, = d2u1_field
+
+    for j=1:n2
+        for i=1:n1
+            H1[i,j] = u1[i,j] * d1u1[i,j] + u2[i,j] * d2u1[i,j]
+        end
+    end
+end
+
+function nonLinear2!(H2_field, u1_field, u2_field, d1u2_field, d2u2_field)
+    # compute (non-linear term)_2 = (u1*d1+u2*d2)u2 = u1*d1u2 + u2*d2u2
+    # compute d2u2 and d2u2
+    d1!(d1u2_field, u2_field)
+    d2!(d2u2_field, u2_field)
+
+    u1, h1, h2, n1, n2 = u1_field
+    u2, = u2_field
+    H2, = H2_field
+    d1u2, = d1u2_field
+    d2u2, = d2u2_field
+
+    for j=1:n2
+        for i=1:n1
+            H2[i,j] = u1[i,j] * d1u2[i,j] + u2[i,j] * d2u2[i,j]
+        end
+    end
+
+end
+
 function dd1!(res, arr, h)
     n1 = size(arr, 1)
     n2 = size(arr, 2)
     for j=1:n2
-        res[1,j] = (arr[1,j] -2*arr[2,j] + arr[3,j]) / h^2
-        res[n1,j] = (arr[n1-2,j] -2*arr[n1-1,j] + arr[n1,j]) / h^2
+        # x1 left border
+        #res[1,j] = (arr[1,j] -2*arr[2,j] +arr[3,j]) / h^2
+        res[1,j] = (2*arr[1,j] -5*arr[2,j] + 4*arr[3,j] -arr[4,j]) / h^2
+        # x1 right border
+        #res[n1,j] = (arr[n1-2,j] -2*arr[n1-1,j] + arr[n1,j]) / h^2
+        res[n1,j] = (-arr[n1-3,j] +4*arr[n1-2,j] -5*arr[n1-1,j] + 2*arr[n1,j]) / h^2
     end
     for i=2:n1-1
         for j=1:n2
@@ -79,16 +141,14 @@ function dd2!(res, arr, h)
     n1 = size(arr, 1)
     n2 = size(arr, 2)
     for i=1:n1
-        res[i,1] = (arr[j,1] -2*arr[j,2] + arr[j,3]) / h^2
-        res[i,n2] = (arr[j,n2-2] -2*arr[i,n2-1] + arr[i,n2]) / h^2
+        # x2 left border
+        #res[i,1] = (arr[i,1] -2*arr[i,2] + arr[i,3]) / h^2
+        res[i,1] = (2*arr[i,1] -5*arr[i,2] +4*arr[i,3] -arr[i,4]) / h^2
+        #res[i,n2] = (arr[i,n2-2] -2*arr[i,n2-1] + arr[i,n2]) / h^2
+        res[i,n2] = (-arr[i,n2-3] +4*arr[i,n2-2] -5*arr[i,n2-1] + 2*arr[i,n2]) / h^2
     end
-    for i=2:n1-1
-        for j=1:n2
-            res[i,j] = (arr[i-1,j] -2*arr[i,j] + arr[i+1,j]) / h^2
-        end
-    end
-    for i=2:n1-1
-        for j=1:n2
+    for j=2:n2-1
+        for i=1:n1
             res[i,j] = (arr[i,j-1] -2*arr[i,j] + arr[i,j+1]) / h^2
         end
     end
@@ -117,7 +177,7 @@ function dd2!(o::Field2D, u::Field2D)
     @dassert(n2 == n2p)
     @dassert(h1 == h1p)
     @dassert(h2 == h2p)
-    dd2(res, arr, h2)
+    dd2!(res, arr, h2)
     return
 end
 function dd2!(u::Field2D)
@@ -145,16 +205,16 @@ function getTestFunc2(n1,n2)
     for jj=1:n2
         for ii=1:n1
             #i[ii,jj] = cos(ii*h1) * sin(jj*h2)
-            i[ii,jj] = (ii*h1)^3 + (jj*h2)^3
+            i[ii,jj] = ((ii-1)*h1)^3 + ((jj-1)*h2)^3
         end
     end
     x1 = Array{Float64}(undef, (n1))
     x2 = Array{Float64}(undef, (n2))
     for ii=1:n1
-        x1[ii] = ii*h1
+        x1[ii] = (ii-1)*h1
     end
     for ii=1:n2
-        x2[ii] = ii*h2
+        x2[ii] = (ii-1)*h2
     end
     return res, x1, x2
 end
@@ -165,10 +225,19 @@ function test_dd1()
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
     o, = output
+    res = 0.
 
     #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     dd1!(output, input)
+
+    for j=1:n2
+        for i=1:n1
+            res += abs(output.arr[i,j] - 6 * (i-1) * h1)
+        end
+    end
+    println("res o - 6x: ", res)
     IO.writeFieldsToFile("prova_dd1", x1, x2, input.arr, output.arr)
+
     #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     #p = plot(p1, p2)
     #display(p)
@@ -177,15 +246,27 @@ end
 function test_dd2()
     n1 = 100
     n2 = 100
-    input = getTestFunc2(n1,n2)
+    input, x1, x2 = getTestFunc2(n1,n2)
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
     o, = output
-    p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    res = 0.
+
+    #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     dd2!(output, input)
-    p2 = heatmap(o, title="d22 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
-    p = plot(p1, p2)
-    display(p)
+
+    for j=1:n2
+        for i=1:n1
+            res += abs(output.arr[i,j] - 6 * (j-1) * h1)
+        end
+    end
+    println("res o - 6x: ", res)
+    IO.writeFieldsToFile("prova_dd2", x1, x2, input.arr, output.arr)
+
+    #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    #p = plot(p1, p2)
+    #display(p)
+
 end
 
 function LaplacianTriDiagSolve!(v, d, h) # mutated argument in first position
