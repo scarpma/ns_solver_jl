@@ -61,23 +61,35 @@ macro dassert(exp)
     end
 end
 
-function d1!(res_field, arr_field)
-    arr, h1, h2, n1, n2 = arr_field
-    res, = res_field
-
-    twice_h1 = 2*h1
-
+function d1!(res, arr, h)
+    n1 = size(arr, 1)
+    n2 = size(arr, 2)
+    twice_h = 2*h
     for j=1:n2
-        res[1,j] = (res[1,j] - res[1,j]) / twice_h1
-        res[n1,j] = (res[n1,j] - res[n1,j]) / twice_h1
+        # x1 left border
+        #res[1,j] = (res[2,j] - res[1,j]) / h1 # forward differentiation
+        res[1,j] = (1.5*arr[1,j] - 2*arr[2,j] + 0.5*arr[3,j]) / h # forward differentiation
+        # x1 right border
+        #res[n1,j] = (res[n1,j] - res[n1-1,j]) / h1 # backward differentiation
+        res[n1,j] = (1.5*arr[n1,j] - 2*arr[n1-1,j] + 0.5*arr[n1-2,j]) / h # backward differentiation
     end
-
     for j=1:n2
         for i=2:n1-1
-            res[i,j] = (res[i+1,j] - res[i-1,j]) / twice_h1
+            # inner part of grid (no borders)
+            res[i,j] = (arr[i+1,j] - arr[i-1,j]) / twice_h # central differentiation
         end
     end
-
+end
+function d1!(res_field::Field2D, arr_field::Field2D)
+    arr, h1, h2, n1, n2 = arr_field
+    res, = res_field
+    d1!(res, arr, h1)
+end
+function d1(arr_field::Field2D)
+    arr, h1, h2, n1, n2 = arr_field
+    res = Array{eltype(arr)}(undef, (n1,n2))
+    d1!(res, arr, h1)
+    return Field2D(res, (h1,h2))
 end
 
 function nonLinear1!(H1_field, u1_field, u2_field, d1u1_field, d2u1_field)
@@ -124,15 +136,16 @@ function dd1!(res, arr, h)
     n2 = size(arr, 2)
     for j=1:n2
         # x1 left border
-        #res[1,j] = (arr[1,j] -2*arr[2,j] +arr[3,j]) / h^2
-        res[1,j] = (2*arr[1,j] -5*arr[2,j] + 4*arr[3,j] -arr[4,j]) / h^2
+        #res[1,j] = (arr[1,j] -2*arr[2,j] +arr[3,j]) / h^2 # forward differentiation
+        res[1,j] = (2*arr[1,j] -5*arr[2,j] + 4*arr[3,j] -arr[4,j]) / h^2 # forward differentiation
         # x1 right border
-        #res[n1,j] = (arr[n1-2,j] -2*arr[n1-1,j] + arr[n1,j]) / h^2
-        res[n1,j] = (-arr[n1-3,j] +4*arr[n1-2,j] -5*arr[n1-1,j] + 2*arr[n1,j]) / h^2
+        #res[n1,j] = (arr[n1-2,j] -2*arr[n1-1,j] + arr[n1,j]) / h^2 # backward differentiation
+        res[n1,j] = (-arr[n1-3,j] +4*arr[n1-2,j] -5*arr[n1-1,j] + 2*arr[n1,j]) / h^2 # backward differentiation
     end
     for i=2:n1-1
         for j=1:n2
-            res[i,j] = (arr[i-1,j] -2*arr[i,j] + arr[i+1,j]) / h^2
+            # inner part of grid (no borders)
+            res[i,j] = (arr[i-1,j] -2*arr[i,j] + arr[i+1,j]) / h^2 # central differentiation
         end
     end
     return
@@ -142,14 +155,16 @@ function dd2!(res, arr, h)
     n2 = size(arr, 2)
     for i=1:n1
         # x2 left border
-        #res[i,1] = (arr[i,1] -2*arr[i,2] + arr[i,3]) / h^2
-        res[i,1] = (2*arr[i,1] -5*arr[i,2] +4*arr[i,3] -arr[i,4]) / h^2
-        #res[i,n2] = (arr[i,n2-2] -2*arr[i,n2-1] + arr[i,n2]) / h^2
-        res[i,n2] = (-arr[i,n2-3] +4*arr[i,n2-2] -5*arr[i,n2-1] + 2*arr[i,n2]) / h^2
+        #res[i,1] = (arr[i,1] -2*arr[i,2] + arr[i,3]) / h^2 # forward differentiation
+        res[i,1] = (2*arr[i,1] -5*arr[i,2] +4*arr[i,3] -arr[i,4]) / h^2 # forward differentiation
+        # x2 right border
+        #res[i,n2] = (arr[i,n2-2] -2*arr[i,n2-1] + arr[i,n2]) / h^2 # backward differentiation
+        res[i,n2] = (-arr[i,n2-3] +4*arr[i,n2-2] -5*arr[i,n2-1] + 2*arr[i,n2]) / h^2 # backward differentiation
     end
     for j=2:n2-1
         for i=1:n1
-            res[i,j] = (arr[i,j-1] -2*arr[i,j] + arr[i,j+1]) / h^2
+            # inner part of grid (no borders)
+            res[i,j] = (arr[i,j-1] -2*arr[i,j] + arr[i,j+1]) / h^2 # central differentiation
         end
     end
     return
@@ -217,6 +232,34 @@ function getTestFunc2(n1,n2)
         x2[ii] = (ii-1)*h2
     end
     return res, x1, x2
+end
+function test_d1()
+    n1 = 100
+    n2 = 100
+    input, x1, x2 = getTestFunc2(n1,n2)
+    i, h1, h2 = input
+    output = Field2D(Float64, (h1,h2), (n1, n2))
+    o, = output
+    res = 0.
+
+    #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    d1!(output, input)
+
+    for j=1:n2
+        for i=1:n1
+            res += abs(output.arr[i,j] - 3 * ((i-1) * h1)^2)
+        end
+    end
+    for i=1:n1
+        println(abs(output.arr[i,1] - 3 * ((i-1) * h1)^2))
+    end
+    println("res o - 6x: ", res)
+    IO.writeFieldsToFile("prova_d1", x1, x2, input.arr, output.arr)
+
+    #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    #p = plot(p1, p2)
+    #display(p)
+
 end
 function test_dd1()
     n1 = 100

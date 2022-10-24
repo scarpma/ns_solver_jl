@@ -34,7 +34,6 @@ function writeSingleFieldToFile(filename::String,x1,x2,p,fieldName::String)
     h1 = x1[2] - x1[1]
     n1 = length(x1)
     x1n = collect(range(-h1/2, (n1+0.5)*h1, n1+1))
-    println(x1n)
     h2 = x2[2] - x2[1]
     n2 = length(x2)
     x2n = collect(range(-h2/2, (n2+0.5)*h2, n2+1))
@@ -50,7 +49,6 @@ function writeFieldsToFile(filename::String,x1,x2,fields...)
     h1 = x1[2] - x1[1]
     n1 = length(x1)
     x1n = collect(range(-h1/2, (n1+0.5)*h1, n1+1))
-    println(x1n)
     h2 = x2[2] - x2[1]
     n2 = length(x2)
     x2n = collect(range(-h2/2, (n2+0.5)*h2, n2+1))
