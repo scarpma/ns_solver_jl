@@ -2,6 +2,7 @@ include("./IO.jl")
 include("./FiniteDifference.jl")
 using .IO
 using .FiniteDifference
+using Plots
 
 const T = Float64
 const Re = 100.
@@ -26,7 +27,16 @@ p = Field2D(T, (h1,h2), (n1+1,n2+1), 0.)
 
 #FiniteDifference.test_dd1()
 #FiniteDifference.test_dd2()
-FiniteDifference.test_d1()
+
+res = Float64[]
+for i=2:12
+    push!(res, FiniteDifference.test_d2(i^2))
+end
+p = plot([i^2 for i in 2:12], res, xaxis=:log, yaxis=:log)
+x = [i for i in 2:12]
+plot!(x, x.^(-2.))
+display(p)
+
 
 #IO.writeFieldsToFile("prova",x,y,u,v,p)
 #IO.writeSingleFieldToFile("prova_p",xp,yp,p,"p")

@@ -1,8 +1,10 @@
 module FiniteDifference
 
-const DEBUG = true
+global const DEBUG = true
 
 export Field2D, dassert
+
+using Printf
 using Plots
 include("./IO.jl")
 using .IO
@@ -32,8 +34,8 @@ using .IO
 
 struct Field2D
     arr
-    h1::AbstractFloat
-    h2::AbstractFloat
+    h1::Float64
+    h2::Float64
     n1::Int64
     n2::Int64
     function Field2D(arr, (h1, h2))
@@ -89,6 +91,47 @@ function d1(arr_field::Field2D)
     arr, h1, h2, n1, n2 = arr_field
     res = Array{eltype(arr)}(undef, (n1,n2))
     d1!(res, arr, h1)
+    return Field2D(res, (h1,h2))
+end
+function d2!(res, arr, h)
+    n1 = size(arr, 1)
+    n2 = size(arr, 2)
+    twice_h = 2*h
+    for i=1:n1
+        # x1 left border
+        #res[1,j] = (res[2,j] - res[1,j]) / h1 # forward differentiation
+        res[i,1] = (1.5*arr[i,1] - 2*arr[i,2] + 0.5*arr[i,3]) / h # forward differentiation
+        # x1 right border
+        #res[n1,j] = (res[n1,j] - res[n1-1,j]) / h1 # backward differentiation
+        res[i,n2] = (1.5*arr[i,n2] - 2*arr[i,n2-1] + 0.5*arr[i,n2-2]) / h # backward differentiation
+    end
+    for j=2:n2-1
+        for i=1:n1
+            # inner part of grid (no borders)
+            res[i,j] = (arr[i,j+1] - arr[i,j-1]) / twice_h # central differentiation
+        end
+    end
+end
+function d1!(res_field::Field2D, arr_field::Field2D)
+    arr, h1, h2, n1, n2 = arr_field
+    res, = res_field
+    d1!(res, arr, h1)
+end
+function d2!(res_field::Field2D, arr_field::Field2D)
+    arr, h1, h2, n1, n2 = arr_field
+    res, = res_field
+    d2!(res, arr, h1)
+end
+function d1(arr_field::Field2D)
+    arr, h1, h2, n1, n2 = arr_field
+    res = Array{eltype(arr)}(undef, (n1,n2))
+    d1!(res, arr, h1)
+    return Field2D(res, (h1,h2))
+end
+function d2(arr_field::Field2D)
+    arr, h1, h2, n1, n2 = arr_field
+    res = Array{eltype(arr)}(undef, (n1,n2))
+    d2!(res, arr, h1)
     return Field2D(res, (h1,h2))
 end
 
@@ -204,6 +247,27 @@ end
 
 
 ## TESTS
+function compute_residual(sol, an_sol)
+    n1 = size(sol, 1)
+    n2 = size(sol, 2)
+    tmp = 0.
+    res = 0.
+    max_res = 0.
+    for j=1:n2
+        for i=1:n1
+            tmp = abs(sol[i,j] - an_sol[i,j])
+            res += tmp
+            if (tmp > max_res)
+                max_res = tmp 
+            end
+        end
+    end
+    @printf "%10s %.3e\n" "sum res:" res
+    res = res / (n1*n2)
+    @printf "%10s %.3e\n" "mean res:" res
+    @printf "%10s %.3e\n" "max res:" max_res
+    return res
+end
 function getTestFunc1(n1,n2)
     res = Field2D(Float64, (2*pi/n1,2*pi/n2), (n1,n2))
     i, h1, h2, n1, n2 = res
@@ -233,37 +297,43 @@ function getTestFunc2(n1,n2)
     end
     return res, x1, x2
 end
-function test_d1()
-    n1 = 100
-    n2 = 100
+function test_d1(n)
+    n1 = n
+    n2 = n
     input, x1, x2 = getTestFunc2(n1,n2)
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
     o, = output
-    res = 0.
 
     #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     d1!(output, input)
-
-    for j=1:n2
-        for i=1:n1
-            res += abs(output.arr[i,j] - 3 * ((i-1) * h1)^2)
-        end
-    end
-    for i=1:n1
-        println(abs(output.arr[i,1] - 3 * ((i-1) * h1)^2))
-    end
-    println("res o - 6x: ", res)
     IO.writeFieldsToFile("prova_d1", x1, x2, input.arr, output.arr)
-
+    res = compute_residual(output.arr, [3*(i-1)^2*h1^2 for i in 1:n1, j in 1:n2])
     #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     #p = plot(p1, p2)
     #display(p)
-
+    return res
 end
-function test_dd1()
-    n1 = 100
-    n2 = 100
+function test_d2(n)
+    n1 = n
+    n2 = n
+    input, x1, x2 = getTestFunc2(n1,n2)
+    i, h1, h2 = input
+    output = Field2D(Float64, (h1,h2), (n1, n2))
+    o, = output
+
+    #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    d2!(output, input)
+    IO.writeFieldsToFile("prova_d2", x1, x2, input.arr, output.arr)
+    res = compute_residual(output.arr, [3*(j-1)^2*h1^2 for i in 1:n1, j in 1:n2])
+    #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
+    #p = plot(p1, p2)
+    #display(p)
+    return res
+end
+function test_dd1(n)
+    n1 = n
+    n2 = n
     input, x1, x2 = getTestFunc2(n1,n2)
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
@@ -272,23 +342,17 @@ function test_dd1()
 
     #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     dd1!(output, input)
-
-    for j=1:n2
-        for i=1:n1
-            res += abs(output.arr[i,j] - 6 * (i-1) * h1)
-        end
-    end
-    println("res o - 6x: ", res)
     IO.writeFieldsToFile("prova_dd1", x1, x2, input.arr, output.arr)
+    res = compute_residual(output.arr, [6*(i-1)*h1 for i in 1:n1, j in 1:n2])
 
     #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     #p = plot(p1, p2)
     #display(p)
-
+    return res
 end
-function test_dd2()
-    n1 = 100
-    n2 = 100
+function test_dd2(n)
+    n1 = n
+    n2 = n
     input, x1, x2 = getTestFunc2(n1,n2)
     i, h1, h2 = input
     output = Field2D(Float64, (h1,h2), (n1, n2))
@@ -297,19 +361,13 @@ function test_dd2()
 
     #p1 = heatmap(i, title="input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     dd2!(output, input)
-
-    for j=1:n2
-        for i=1:n1
-            res += abs(output.arr[i,j] - 6 * (j-1) * h1)
-        end
-    end
-    println("res o - 6x: ", res)
     IO.writeFieldsToFile("prova_dd2", x1, x2, input.arr, output.arr)
+    res = compute_residual(output.arr, [6*(j-1)*h2 for i in 1:n1, j in 1:n2])
 
     #p2 = heatmap(o, title="d11 input", aspect_ratio=:equal, xlabel="x_1", ylabel="x_2")
     #p = plot(p1, p2)
     #display(p)
-
+    return res
 end
 
 function LaplacianTriDiagSolve!(v, d, h) # mutated argument in first position
