@@ -116,7 +116,6 @@ function staggeredToNormal(staggered)
     return normal
 end
 
-
 function writeUVPFiedsToFile(filename::String,x1,x2,u,v,p)
     h1 = x1[2] - x1[1]
     n1 = length(x1)
@@ -158,6 +157,108 @@ function writeFieldsToFile(filename::String,x1,x2,fields...)
         vtkfile[@sprintf("f%2d",i)] = fields[i]
     end
     outfiles = vtk_save(vtkfile)
+end
+
+function readSTLdim(filename::String)::Int64
+    lines = readlines(filename)
+    ntria::Int64 = 0
+    i::Int64 = 1
+    while true
+        if occursin("endsolid", lines[i])
+            break
+        elseif occursin("outer ", lines[i])
+            ntria = ntria + 1
+            i += 4
+        else
+            i += 1
+        end
+    end
+    return ntria
+end
+
+function readSTL(filename::String)::Array{Float64, 2}
+    ntria = readSTLdim(filename)
+    vertOfTria = Array{Float64, 2}(undef, (3,3*ntria))
+    lines = readlines(filename)
+    i::Int64 = 1
+    j::Int64 = 1
+    while true
+        if occursin("endsolid", lines[i])
+            break
+        end
+        if occursin("outer ", lines[i])
+            line = strip(lines[i])
+            vertOfTria[:,j  ] = parse.(Float64, split(strip(lines[i+1]), " ")[2:end])
+            vertOfTria[:,j+1] = parse.(Float64, split(strip(lines[i+2]), " ")[2:end])
+            vertOfTria[:,j+2] = parse.(Float64, split(strip(lines[i+3]), " ")[2:end])
+            j = j + 3
+            i += 4
+            else
+                i += 1
+            end
+        end
+    return vertOfTria
+end
+
+function stlConnectivity(vertOfTria::Array{Float64, 2})
+    """
+    this function iterates over vertices found inside an STL
+    file and keeps only new vertices inside the array <nodes>.
+    Each new vertex not closer than <tol> to any other vertices
+    in <nodes> is added to <nodes>.
+    
+    <whois> maps from unordered vertices to unordered vertices
+        all_vertices_index --> corresponding unique vertex inside all_vertices_index
+    <nodes> maps from ordered vertices to unordered vertices
+        unique vertex index from ordered vertex array --> all_vertices_index
+    <nodes_inv> maps from unordered vertices to ordered vertices
+        all_vertices_index --> corresponding unique vertex inside ordered vertex array
+    
+    """    
+    tol = 1.0e-12 # m^2
+    ntria = div(size(vertOfTria, 2), 3)
+    maxNOfVert = 3*ntria # temp dim for new ordered vertices array
+    alreadyAssigned = zeros(Int64, (ntria*3))
+    alreadyAssigned[1] = 1
+    whois = Array{Int64, 1}(undef, (3*ntria))
+    nodes = Array{Int64, 1}(undef, (maxNOfVert))
+    nodes_inv = Array{Int64, 1}(undef, (3*ntria))
+    nodes[1] = 1
+    nodes_inv[1] = 1
+    whois[1] = 1
+    whois[1] = 1
+    nVertOrdered = 1 # current len of ordered vertices <nodes>
+    last_j::Int64 = 0
+    for i=1:3*ntria
+        if alreadyAssigned[i] == 0
+            dist_sum = 0.::Float64
+            isDouble = false
+            for j=1:nVertOrdered
+                dist2 = sum((vertOfTria[:,i] - vertOfTria[:,nodes[j]]).^2)
+                dist_sum += dist2
+                if dist2 < tol
+                    # vertex i is closer than tol to vertex nodes[j]
+                    # this is not a new vertex !
+                    whois[i] = nodes[j]
+                    alreadyAssigned[i] = 1
+                    nodes_inv[i] = j
+                    isDouble = true
+                    break
+                end
+            end
+            # vertex <i> is not closer than <tol> to any vertex inside <nodes>
+            # let's add vertex <i> to <nodes>
+            if isDouble == false
+                nVertOrdered += 1
+                nodes[nVertOrdered] = i
+                nodes_inv[i] = nVertOrdered
+                whois[i] = i
+                alreadyAssigned[i] = 1    
+            end
+        end
+    end
+    resize!(nodes, nVertOrdered)
+    return nodes, nodes_inv, whois
 end
 
 end
