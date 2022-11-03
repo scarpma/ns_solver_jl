@@ -24,7 +24,7 @@ function writeSurface(filename, cooOfVert, vertOfTria, fields...)
     return
 end
 
-function read_gts(filename, T)
+function read_gts(filename::String, T::DataType)
     lines = readlines(filename)
     nNodes, nEdges, nTria = parse.(Int64, split(lines[1], " "))
     coords = reshape(parse.(T, split(join(lines[2:nNodes+1], " "), " ")), (3,nNodes))
@@ -56,7 +56,7 @@ function read_gts(filename, T)
     return coords, vertOfTria, vertOfEdge, edgeOfTria
 end
 
-function read_gts_plus(filename, T)
+function read_gts_plus(filename::String, T::DataType)
     coords, vertOfTria, vertOfEdge, edgeOfTria = read_gts(filename, T)
     nNodes = size(coords, 2)
     nEdges = size(vertOfEdge, 2)
