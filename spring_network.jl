@@ -167,6 +167,77 @@ end
 
 compute_kenergy(v, mass) = 0.5 * mass * sum(v.^2.)
 
+function compute_vertQuartetOfEdge(m)
+    triaOfEdge, nTriaOfEdge = compute_triaOfEdge(m)
+    vertQuartetOfEdge = zeros(Int64, (4, m.ne))
+    for i=1:m.ne
+        t1, t2 = triaOfEdge[:,i]
+        v2, v3 = m.vertOfEdge[:,i]
+        if (t1 != 0 && t2 != 0)
+            v1_, v2_, v3_ = m.vertOfTria[:,t1]
+            if (v1_!=v2 && v1_!=v3)
+                v1 = v1_
+            elseif (v2_!=v2 && v2_!=v3)
+                v1 = v2_
+            else
+                v1 = v3_
+            end
+            v1_, v2_, v3_ = m.vertOfTria[:,t2]
+            if (v1_!=v2 && v1_!=v3)
+                v4 = v1_
+            elseif (v2_!=v2 && v2_!=v3)
+                v4 = v2_
+            else
+                v4 = v3_
+            end
+            vertQuartetOfEdge[:,i] .= v1, v2, v3, v4
+        end
+    end
+    return vertQuartetOfEdge
+end
+
+function compute_angle!(theta, m::SurfaceMesh, normals)
+    triaOfEdge, nTriaOfEdge = compute_triaOfEdge(m)
+    for i=1:m.ne
+        t1 = triaOfEdge[1,i]
+        t2 = triaOfEdge[2,i]
+        if (t1!=0 && t2!=0)
+            n1 = normals[:,t1]
+            n2 = normals[:,t2]
+            pv = cross(n1, n2)
+            tmp1 = sqrt(sum(pv.^2.))
+            tmp2 = sum(n1.*n2)
+            theta[i]= atan(tmp1,tmp2)
+        end
+    end
+end
+
+function edgeArrayToTriaArray(m::SurfaceMesh, arr::Array{T,1})
+    triaOfEdge, nTriaOfEdge = compute_triaOfEdge(m)
+    T = eltype(m.xyzOfVert)
+    newArr = zeros(T, m.nt)
+    for i=1:m.ne
+        t1, t2 = triaOfEdge[:,i]
+        newArr[t1] += arr[i]
+        if nTriaOfEdge[i] > 1
+            newArr[t2] += arr[i]
+        end
+    end
+    newArr = newArr ./ 3.
+    return newArr
+end
+
+function test_compute_angle()
+    T = Float64
+    normals = zeros(T, (3,m.nt))
+    areas = zeros(T, m.nt)
+    thetas = zeros(T, m.ne)
+    compute_cell_normals_and_areas!(normals, areas, m)
+    compute_angle!(thetas, m, normals)
+    thetasDegTria = edgeArrayToTriaArray(m, thetas) .* 360. / 2pi
+    IO.writeSurface("provatheta", m.xyzOfVert, m.vertOfTria, thetasDegTria)
+end
+
 function main()
 T = Float64
 dt::T = 0.0001
@@ -235,3 +306,4 @@ end
 end
 
 main()
+
