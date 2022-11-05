@@ -49,8 +49,8 @@ mutable struct SurfaceMesh{T}
             triaNormals0, triaAreas0, angleOfEdges0)
         
         # populate arrays
-        compute_vert1234OfEdge!(m.vert1234OfEdge, m)
         compute_triaOfEdge!(m.triaOfEdge, m.nTriaOfEdge, m)
+        compute_vert1234OfEdge!(m.vert1234OfEdge, m)
         compute_distances!(m.lenOfEdges0, m)
         compute_triaNormalAndArea!(m.triaNormals0, m.triaAreas0, m)
         compute_angle!(m.angleOfEdges0, m, m.triaNormals0)
@@ -193,6 +193,16 @@ function edgeArrayToTriaArray(m::SurfaceMesh, arr)
     end
     newArr = newArr ./ 3.
     return newArr
+end
+function edgeArrayToTriaArray!(newArr, m::SurfaceMesh, arr)
+    for i=1:m.ne
+        t1, t2 = m.triaOfEdge[:,i]
+        newArr[t1] += arr[i]
+        if m.nTriaOfEdge[i] > 1
+            newArr[t2] += arr[i]
+        end
+    end
+    newArr = newArr ./ 3.
 end
 
 function test_compute_angle()

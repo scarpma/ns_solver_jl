@@ -5,7 +5,12 @@ using WriteVTK
 using WriteVTK
 using Printf
 
-function writeSurface(filename, cooOfVert, vertOfTria, fields...)
+function writeSurface(
+        filename::String,
+        cooOfVert::Union{Matrix{Float64}, Matrix{Float32}},
+        vertOfTria::Matrix{Int64},
+        fieldNames::Vector{String}=Vector{String}(undef,0),
+        fields...)
     if vertOfTria == nothing
         cells = [MeshCell(VTKCellTypes.VTK_VERTEX, (i, )) for i = 1:size(cooOfVert,2)]
     else
@@ -16,8 +21,9 @@ function writeSurface(filename, cooOfVert, vertOfTria, fields...)
     end
         mesh = vtk_grid(filename, cooOfVert[1,:], cooOfVert[2,:], cooOfVert[3,:], cells)
     if size(fields,1) > 0
+        @assert size(fieldNames,1) == size(fields,1)
         for i in eachindex(fields)
-            mesh[@sprintf("f%2d",i)] = fields[i]
+            mesh[fieldNames[i]] = fields[i]
         end
     end
     vtk_save(mesh)
