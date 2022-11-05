@@ -50,9 +50,9 @@ mutable struct SurfaceMesh{T}
         
         # populate arrays
         compute_triaOfEdge!(m.triaOfEdge, m.nTriaOfEdge, m)
-        compute_vert1234OfEdge!(m.vert1234OfEdge, m)
         compute_distances!(m.lenOfEdges0, m)
         compute_triaNormalAndArea!(m.triaNormals0, m.triaAreas0, m)
+        compute_vert1234OfEdge!(m.vert1234OfEdge, m)
         compute_angle!(m.angleOfEdges0, m, m.triaNormals0)
         
         return m
@@ -72,10 +72,13 @@ function compute_triaOfEdge!(triaOfEdge, nTriaOfEdge, m)
 end
 
 function compute_vert1234OfEdge!(vert1234OfEdge, m)
+    normals = m.triaNormals0
     for i=1:m.ne
+    #for i=1:2
         t1, t2 = m.triaOfEdge[:,i]
         v2, v3 = m.vertOfEdge[:,i]
         if (t1 != 0 && t2 != 0)
+            # find vertex opposite to edge i on t1
             v1_, v2_, v3_ = m.vertOfTria[:,t1]
             if (v1_!=v2 && v1_!=v3)
                 v1 = v1_
@@ -84,6 +87,7 @@ function compute_vert1234OfEdge!(vert1234OfEdge, m)
             else
                 v1 = v3_
             end
+            # find vertex opposite to edge i on t2
             v1_, v2_, v3_ = m.vertOfTria[:,t2]
             if (v1_!=v2 && v1_!=v3)
                 v4 = v1_
@@ -92,6 +96,108 @@ function compute_vert1234OfEdge!(vert1234OfEdge, m)
             else
                 v4 = v3_
             end
+            x1 = m.xyzOfVert[:,v1]
+            x2 = m.xyzOfVert[:,v2]
+            x3 = m.xyzOfVert[:,v3]
+            x4 = m.xyzOfVert[:,v4]
+            tmp1 = LinearAlgebra.cross(x2-x1,x3-x1)
+            tmp2 = LinearAlgebra.cross(x2-x4,x4-x3)
+            if (LinearAlgebra.dot(tmp1, normals[:,t1])<0.)
+                tmp = v3
+                v3 = v2
+                v2 = tmp
+                x2 = m.xyzOfVert[:,v2]
+                x3 = m.xyzOfVert[:,v3]
+                tmp1 = LinearAlgebra.cross(x2-x1,x3-x1)
+                tmp2 = LinearAlgebra.cross(x2-x4,x4-x3)
+            end
+            #@assert LinearAlgebra.dot(tmp1, tmp2)>0. i
+            @assert LinearAlgebra.dot(normals[:,t1], tmp1)>0. LinearAlgebra.dot(normals[:,t1], tmp1)
+            @assert LinearAlgebra.dot(normals[:,t2], tmp2)>0. LinearAlgebra.dot(normals[:,t2], tmp2)
+            vert1234OfEdge[:,i] .= v1, v2, v3, v4
+        end
+    end
+end
+
+function compute_vert1234OfEdge__!(vert1234OfEdge, m)
+    normals = m.triaNormals0
+    for i=1:m.ne
+    #for i=1:2
+        t1, t2 = m.triaOfEdge[:,i]
+        if (t1 != 0 && t2!= 0)
+            e1, e2, e3 = m.edgeOfTria[:,t1]
+            if (e1 == i)
+                v = m.vertOfEdge[1,e2]
+                if (v != m.vertOfEdge[1,i] && v != m.vertOfEdge[2,i])
+                    v1 = v
+                else
+                    v1 = m.vertOfEdge[2,e2]
+                end
+            elseif (e2 == i)
+                v = m.vertOfEdge[1,e1]
+                if (v != m.vertOfEdge[1,i] && v != m.vertOfEdge[2,i])
+                    v1 = v
+                else
+                    v1 = m.vertOfEdge[2,e1] 
+                end
+            elseif (e3 == i)
+                v = m.vertOfEdge[1,e2]
+                if (v != m.vertOfEdge[1,i] && v != m.vertOfEdge[2,i])
+                    v1 = v
+                else
+                    v1 = m.vertOfEdge[2,e2]
+                end
+            else
+                println("ERROR")
+            end
+    
+    
+            e1, e2, e3 = m.edgeOfTria[:,t2]
+            if (e1 == i)
+                v = m.vertOfEdge[1,e2]
+                if (v != m.vertOfEdge[1,i] && v != m.vertOfEdge[2,i])
+                    v4 = v
+                else
+                    v4 = m.vertOfEdge[2,e2] 
+                end
+            elseif (e2 == i)
+                v = m.vertOfEdge[1,e1]
+                if (v != m.vertOfEdge[1,i] && v != m.vertOfEdge[2,i])
+                    v4 = v
+                else
+                    v4 = m.vertOfEdge[2,e1] 
+                end
+            elseif (e3 == i)
+                v = m.vertOfEdge[1,e2]
+                if (v != m.vertOfEdge[1,i] && v != m.vertOfEdge[2,i])
+                    v4 = v
+                else
+                    v4 = m.vertOfEdge[2,e2]
+                end
+            else
+                println("ERROR")
+            end
+    
+            v2, v3 = m.vertOfEdge[:,i]
+                
+            x1 = m.xyzOfVert[:,v1]
+            x2 = m.xyzOfVert[:,v2]
+            x3 = m.xyzOfVert[:,v3]
+            x4 = m.xyzOfVert[:,v4]
+            tmp1 = LinearAlgebra.cross(x2-x1,x3-x1)
+            tmp2 = LinearAlgebra.cross(x2-x4,x4-x3)
+            if (LinearAlgebra.dot(tmp1, normals[:,t1])<0.)
+                tmp = v3
+                v3 = v2
+                v2 = tmp
+                x2 = m.xyzOfVert[:,v2]
+                x3 = m.xyzOfVert[:,v3]
+                tmp1 = LinearAlgebra.cross(x2-x1,x3-x1)
+                tmp2 = LinearAlgebra.cross(x2-x4,x4-x3)
+            end
+            #@assert LinearAlgebra.dot(tmp1, tmp2)>0. i
+            @assert LinearAlgebra.dot(normals[:,t1], tmp1)>0. LinearAlgebra.dot(normals[:,t1], tmp1)
+            @assert LinearAlgebra.dot(normals[:,t2], tmp2)>0. LinearAlgebra.dot(normals[:,t2], tmp2)
             vert1234OfEdge[:,i] .= v1, v2, v3, v4
         end
     end
@@ -176,7 +282,7 @@ function compute_angle!(theta, m::SurfaceMesh, normals)
             pv = cross(n1, n2)
             tmp1 = sqrt(sum(pv.^2.))
             tmp2 = sum(n1.*n2)
-            theta[i]= atan(tmp1,tmp2)
+            theta[i] = atan(tmp1,tmp2)
         end
     end
 end
