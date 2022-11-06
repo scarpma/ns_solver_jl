@@ -2,7 +2,7 @@ include("./IO.jl")
 include("./myMesh.jl")
 using .IO
 using .myMesh
-#using LinearAlgebra: cross
+using LinearAlgebra: dot
 using Printf
 
 function expand_mesh(m, pnormals, A)
@@ -27,30 +27,31 @@ function cross!(res, a, b)
 end
 
 function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, potenergy, tmp)
+    T = eltype(forces)
     forces[:,:] .= 0.0
     potenergy[1] = 0.0
-
-    T = eltype(forces)
-    b11::T = 0.
-    b12::T = 1.
-    b22::T = 0.
-    beta::T = 0.
-    modcsi::T = 0.
-    modzet::T = 0.
-    a21 = zeros(T, 3)
-    a31 = zeros(T, 3)
-    a32 = zeros(T, 3)
-    a13 = zeros(T, 3)
-    a34 = zeros(T, 3)
-    a42 = zeros(T, 3)
-    a23 = zeros(T, 3)
-    a24 = zeros(T, 3)
-    csi = zeros(T, 3)
-    zet = zeros(T, 3)
-    tvec1 = zeros(T, 3)
-    tvec2 = zeros(T, 3)
-    tvec3 = zeros(T, 3)
-    tvec4 = zeros(T, 3)
+    
+    # for bending forces computations
+    b11::T   = 0
+    b12::T   = 0
+    b22::T   = 0
+    beta::T  = 0
+    modn1::T = 0
+    modn2::T = 0
+    a21      = Vector{T}(undef, 3)
+    a31      = Vector{T}(undef, 3)
+    a32      = Vector{T}(undef, 3) 
+    a13      = Vector{T}(undef, 3) 
+    a34      = Vector{T}(undef, 3)
+    a42      = Vector{T}(undef, 3)
+    a23      = Vector{T}(undef, 3)
+    a24      = Vector{T}(undef, 3)
+    n1       = Vector{T}(undef, 3)
+    n2       = Vector{T}(undef, 3)
+    tvec1    = Vector{T}(undef, 3)
+    tvec2    = Vector{T}(undef, 3)
+    tvec3    = Vector{T}(undef, 3)
+    tvec4    = Vector{T}(undef, 3)
 
 
     # in plane springs
@@ -121,37 +122,37 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
             a23[:] = x2 - x3
             a24[:] = x2 - x4
 
-            cross!(csi, a21,a31)
-            cross!(zet, a34,a24)
-            modcsi = sqrt(sum(csi.^2.))
-            modzet = sqrt(sum(zet.^2.))
+            cross!(n1, a21, a31)
+            cross!(n2, a34, a24)
+            modn1 = sqrt(sum(n1.^2.))
+            modn2 = sqrt(sum(n2.^2.))
 
-            b11 = -beta * cos(thetas[i])/(modcsi^2.)
-            b12 = +beta / (modcsi * modzet)
-            b22 = -beta * cos(thetas[i])/(modzet^2.)
+            b11 = -beta * cos(thetas[i])/(modn1^2.)
+            b12 = +beta / (modn1 * modn2)
+            b22 = -beta * cos(thetas[i])/(modn2^2.)
 
             # v1
-            cross!(tvec1, csi, a32)
-            cross!(tvec2, zet, a32)
+            cross!(tvec1, n1, a32)
+            cross!(tvec2, n2, a32)
             forces[:,v1] = forces[:,v1] + b11.*tvec1 + b12.*tvec2
 
             # v2
-            cross!(tvec1, csi, a13)
-            cross!(tvec2, csi, a34)
-            cross!(tvec3, zet, a13)
-            cross!(tvec4, zet, a34)
+            cross!(tvec1, n1, a13)
+            cross!(tvec2, n1, a34)
+            cross!(tvec3, n2, a13)
+            cross!(tvec4, n2, a34)
             forces[:,v2] = forces[:,v2] + b11.*tvec1 + b12.*(tvec2+tvec3) + b22.*tvec4
 
             # v3
-            cross!(tvec1, csi, a21)
-            cross!(tvec2, csi, a42)
-            cross!(tvec3, zet, a21)
-            cross!(tvec4, zet, a42)
+            cross!(tvec1, n1, a21)
+            cross!(tvec2, n1, a42)
+            cross!(tvec3, n2, a21)
+            cross!(tvec4, n2, a42)
             forces[:,v3] = forces[:,v3] + b11.*tvec1 + b12.*(tvec2+tvec3) + b22.*tvec4
 
             # v4
-            cross!(tvec1, csi, a23)
-            cross!(tvec2, zet, a23)
+            cross!(tvec1, n1, a23)
+            cross!(tvec2, n2, a23)
             forces[:,v4] = forces[:,v4] + b12.*tvec1 + b22.*tvec2
 
             potenergy[1] += kb * (1 - cos(thetas[i] - thetas0[i]))
@@ -167,8 +168,10 @@ function velocity_verlet!(
         a::Union{Array{Float64,2}, Array{Float32,2}},
         am::Union{Array{Float64,2}, Array{Float32,2}},
         dt::Union{Float64, Float32})
-    x[:,:] = x + dt .* v + 0.5 .* am .* dt^2.
-    v[:,:] = v + 0.5 .* (a + am) .* dt
+    for i=1:size(x,2)
+        x[:,i] = x[:,i] + dt .* v[:,i] + 0.5 .* am[:,i] .* dt^2.
+        v[:,i] = v[:,i] + 0.5 .* (a[:,i] + am[:,i]) .* dt
+    end
 end
 
 function compute_kenergy!(kenergy, v, mass)
