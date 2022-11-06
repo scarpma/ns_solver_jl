@@ -5,7 +5,14 @@ using .IO
 using LinearAlgebra
 
 export SurfaceMesh, compute_distances!, compute_angle!,
-       compute_triaNormalAndArea!
+       compute_triaNormalAndArea!, compute_normalsAreasAndAngles!,
+       cross!
+
+function cross!(res, a, b)
+    res[1] = a[2] * b[3] - a[3] * b[2]
+    res[2] = a[3] * b[1] - a[1] * b[3]
+    res[3] = a[1] * b[2] - a[2] * b[1]
+end
 
 mutable struct SurfaceMesh{T}
     nv::Int64 # number of vertices
@@ -283,6 +290,42 @@ function compute_angle!(theta, m::SurfaceMesh, normals)
             tmp1 = sqrt(sum(pv.^2.))
             tmp2 = sum(n1.*n2)
             theta[i] = atan(tmp1,tmp2)
+        end
+    end
+end
+
+function compute_normalsAreasAndAngles!(normals, areas, thetas, m,
+        a21::Union{Vector{Float64},Vector{Float32}},
+        a31::Union{Vector{Float64},Vector{Float32}},
+        a34::Union{Vector{Float64},Vector{Float32}},
+        a24::Union{Vector{Float64},Vector{Float32}},
+        n1::Union{Vector{Float64},Vector{Float32}},
+        n2::Union{Vector{Float64},Vector{Float32}},
+        tmp::Union{Vector{Float64},Vector{Float32}})
+    for i=1:m.ne
+        t1, t2 = m.triaOfEdge[:,i]
+        if (t1 != 0 && t2 != 0)
+            v1, v2, v3, v4 = m.vert1234OfEdge[:,i]
+            x1 = m.xyzOfVert[:,v1]
+            x2 = m.xyzOfVert[:,v2]
+            x3 = m.xyzOfVert[:,v3]
+            x4 = m.xyzOfVert[:,v4]
+            a21[:] = x2 - x1
+            a31[:] = x3 - x1
+            a34[:] = x3 - x4
+            a24[:] = x2 - x4
+            cross!(n1, a21, a31)
+            cross!(n2, a34, a24)
+            A1 = sqrt(sum(n1.^2.))
+            A2 = sqrt(sum(n2.^2.))
+            areas[t1] = A1
+            areas[t2] = A2
+            normals[:, t1] = n1
+            normals[:, t2] = n2
+            cross!(tmp, n1./A1, n2./A2)
+            tmp1 = sqrt(sum(tmp.^2.))
+            tmp2 = dot(n1, n2) / (A1 * A2)
+            thetas[i] = atan(tmp1,tmp2)
         end
     end
 end
