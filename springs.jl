@@ -90,10 +90,6 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
             n1 = normals[:,t1]
             n2 = normals[:,t2]
 
-            # compute coefficients b11 b12 b22 beta and cross products
-            b11 = - cos(thetas[i])
-            b22 = b11
-            beta = kb * (sin(thetas[i])*cos(thetas0[i]) - cos(thetas[i])*sin(thetas0[i])) / sqrt(1. - cos(thetas[i])^2.)
             ## a11 = cross(n1, x3 - x2)
             ## a12 = cross(n2, x3 - x2)
             ## a21 = cross(n1, x1 - x3)
@@ -127,9 +123,13 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
             modn1 = sqrt(sum(n1.^2.))
             modn2 = sqrt(sum(n2.^2.))
 
-            b11 = -beta * cos(thetas[i])/(modn1^2.)
+            # compute coefficients b11 b12 b22 beta and cross products
+            beta = kb * (sin(thetas[i])*cos(thetas0[i]) - (dot(n1,n2)/(modn1*modn2))*sin(thetas0[i])) /
+                #sqrt(1. - (dot(n1,n2)/(modn1*modn2))^2.)
+                sqrt(1. - cos(thetas[i])^2.)
+            b11 = -beta * (dot(n1,n2)/(modn1*modn2))/(modn1^2.)
             b12 = +beta / (modn1 * modn2)
-            b22 = -beta * cos(thetas[i])/(modn2^2.)
+            b22 = -beta * (dot(n1,n2)/(modn1*modn2))/(modn2^2.)
 
             # v1
             cross!(tvec1, n1, a32)
@@ -180,8 +180,8 @@ end
 
 function main()
 T = Float64
-dt::T = 0.0001      # time step [s]
-tprint = 0.01       # save file time step [s]
+dt::T = 1.e-5       # time step [s]
+tprint = 0.005      # save file time step [s]
 density = 1060*1.5  # mass density of surface [kg / m^3]
 E = 1.e5            # young modulus [Pa]
 #E = 0.              # young modulus [Pa]
@@ -240,7 +240,7 @@ for i=0:nsteps
         myMesh.edgeArrayToTriaArray!(tstrains, m2, strains)
         myMesh.edgeArrayToTriaArray!(dtheta, m2, thetas - m.angleOfEdges0)
         IO.writeSurface(
-            @sprintf("prova_expanded_%5.5d",div(i,Int64(tprint/dt))),
+            @sprintf("prova_expanded_%5.5d",div(i,Int64(round(tprint/dt)))),
             m2.xyzOfVert, m2.vertOfTria,
             ["forces", "strains", "dtheta"],
             forces, tstrains, dtheta./(360/2pi))
