@@ -20,7 +20,13 @@ function compute_strains!(strains, d, m)
     end
 end
 
-function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, potenergy)
+function cross!(res, a, b)
+    res[1] = a[2] * b[3] - a[3] * b[2]
+    res[2] = a[3] * b[1] - a[1] * b[3]
+    res[3] = a[1] * b[2] - a[2] * b[1]
+end
+
+function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, potenergy, tmp)
     T = eltype(forces)
     forces[:,:] .= 0.0
     potenergy[1] = 0.0
@@ -32,7 +38,6 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
     beta::T  = 0
     modn1::T = 0
     modn2::T = 0
-    theta::T = 0
     a21      = Vector{T}(undef, 3)
     a31      = Vector{T}(undef, 3)
     a32      = Vector{T}(undef, 3) 
@@ -43,21 +48,20 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
     a24      = Vector{T}(undef, 3)
     n1       = Vector{T}(undef, 3)
     n2       = Vector{T}(undef, 3)
-    tmp      = Vector{T}(undef, 3)
     tvec1    = Vector{T}(undef, 3)
     tvec2    = Vector{T}(undef, 3)
     tvec3    = Vector{T}(undef, 3)
     tvec4    = Vector{T}(undef, 3)
 
-    compute_distances!(d, m)
-    compute_normalsAreasAndAngles!(normals, areas, thetas, m,
-        a21, a31, a34, a24, n1, n2, tmp)
     d0 = m.lenOfEdges0
     thetas0 = m.angleOfEdges0
+    compute_angle!(thetas, m, normals)
+
     for i=1:m.ne
+        t1, t2 = m.triaOfEdge[:,i]
+
         # in plane springs
         # update spring constants
-        t1, t2 = m.triaOfEdge[:,i]
         if (t1 != 0 && t2 != 0)
             ke[i] = E2d*(areas[t1]+areas[t2])/d[i]^2
         elseif (t1 != 0 && t2 == 0)
@@ -73,15 +77,16 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
         potenergy[1] += ke[i] * (d[i] - d0[i])^2.
 
         # bending springs
-
         # if edge is not on boundary
         if (t1 != 0 && t2 != 0)
-            # compute bending spring forces on v1 v2 v3 v4
             v1, v2, v3, v4 = m.vert1234OfEdge[:,i]
             x1 = m.xyzOfVert[:,v1]
             x2 = m.xyzOfVert[:,v2]
             x3 = m.xyzOfVert[:,v3]
             x4 = m.xyzOfVert[:,v4]
+            n1 = normals[:,t1]
+            n2 = normals[:,t2]
+
             a21[:] = x2 - x1
             a31[:] = x3 - x1
             a32[:] = x3 - x2
@@ -90,11 +95,12 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
             a42[:] = x4 - x2
             a23[:] = x2 - x3
             a24[:] = x2 - x4
-            n1 = normals[:,t1]
-            n2 = normals[:,t2]
-            modn1 = areas[t1]
-            modn2 = areas[t2]
-            theta = thetas[i]
+
+            cross!(n1, a21, a31)
+            cross!(n2, a34, a24)
+            modn1 = sqrt(sum(n1.^2.))
+            modn2 = sqrt(sum(n2.^2.))
+
             # compute coefficients b11 b12 b22 beta and cross products
             beta = kb * (sin(thetas[i])*cos(thetas0[i]) - (dot(n1,n2)/(modn1*modn2))*sin(thetas0[i])) /
                 #sqrt(1. - (dot(n1,n2)/(modn1*modn2))^2.)
@@ -102,32 +108,36 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
             b11 = -beta * (dot(n1,n2)/(modn1*modn2))/(modn1^2.)
             b12 = +beta / (modn1 * modn2)
             b22 = -beta * (dot(n1,n2)/(modn1*modn2))/(modn2^2.)
+
             # v1
             cross!(tvec1, n1, a32)
             cross!(tvec2, n2, a32)
             forces[:,v1] = forces[:,v1] + b11.*tvec1 + b12.*tvec2
+
             # v2
             cross!(tvec1, n1, a13)
             cross!(tvec2, n1, a34)
             cross!(tvec3, n2, a13)
             cross!(tvec4, n2, a34)
             forces[:,v2] = forces[:,v2] + b11.*tvec1 + b12.*(tvec2+tvec3) + b22.*tvec4
+
             # v3
             cross!(tvec1, n1, a21)
             cross!(tvec2, n1, a42)
             cross!(tvec3, n2, a21)
             cross!(tvec4, n2, a42)
             forces[:,v3] = forces[:,v3] + b11.*tvec1 + b12.*(tvec2+tvec3) + b22.*tvec4
+
             # v4
             cross!(tvec1, n1, a23)
             cross!(tvec2, n2, a23)
             forces[:,v4] = forces[:,v4] + b12.*tvec1 + b22.*tvec2
 
             potenergy[1] += kb * (1 - cos(thetas[i] - thetas0[i]))
-
-            # damping
         end
     end
+
+
 end
 
 function velocity_verlet!(
@@ -153,7 +163,7 @@ tprint = 0.005      # save file time step [s]
 density = 1060*1.5  # mass density of surface [kg / m^3]
 E = 1.e5            # young modulus [Pa]
 #E = 0.              # young modulus [Pa]
-B = 0.01              # bending modulus
+B = 0.01            # bending modulus
 thickness = 0.002   # thickness of the surface [m]
 E2d = E*thickness
 kb = B * 2. / sqrt(3.)
@@ -180,18 +190,23 @@ am = zeros(T,(3,m2.nv))
 v = zeros(T,(3,m2.nv))
 d = zeros(eltype(forces), m.ne)
 areas = zeros(T,m2.nt)
-normals = zeros(T,(3, m2.nt))
+normals = zeros(T,(3,m2.nt))
 thetas = zeros(T,m2.ne)
 potenergy = zeros(T, 1)
 kenergy = zeros(T, 1)
+tmp = zeros(T, 3)
 tstrains = zeros(T, m2.nt)
 dtheta = zeros(T, m2.nt)
 
 for i=0:nsteps
     
+    compute_distances!(d, m2)
+    compute_triaNormalAndArea!(normals, areas, m2)
+    compute_angle!(thetas, m2, normals)
+
     rms_v = sqrt.(sum(abs2.(v), dims=2) ./ size(v,2)) 
     a_mean = sum(a, dims=2) / size(a, 2)
-    internal_forces!(forces, m2, E2d, kb, ke, d, areas, thetas, normals, potenergy)
+    internal_forces!(forces, m2, E2d, kb, ke, d, areas, thetas, normals, potenergy, tmp)
     tot_force = sum(forces, dims=2)
     compute_kenergy!(kenergy, v, mass)
     compute_strains!(strains, d, m2)
