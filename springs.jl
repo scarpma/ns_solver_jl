@@ -13,20 +13,13 @@ function expand_mesh(m, pnormals, A)
     return m2
 end
 
-function compute_strains!(strains, d, m)
-    d0 = m.lenOfEdges0
-    for i=1:m.ne
-        strains[i] = (d[i] - d0[i]) / d[i]
-    end
-end
-
 function cross!(res, a, b)
     res[1] = a[2] * b[3] - a[3] * b[2]
     res[2] = a[3] * b[1] - a[1] * b[3]
     res[3] = a[1] * b[2] - a[2] * b[1]
 end
 
-function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, potenergy, tmp)
+function internal_forces!(forces, m, E2d, kb, visc, ke, d, areas, thetas, normals, v, potenergy, tmp)
     T = eltype(forces)
     forces[:,:] .= 0.0
     potenergy[1] = 0.0
@@ -52,6 +45,8 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
     tvec2    = Vector{T}(undef, 3)
     tvec3    = Vector{T}(undef, 3)
     tvec4    = Vector{T}(undef, 3)
+    vel1     = Vector{T}(undef, 3)
+    vel2     = Vector{T}(undef, 3)
 
     d0 = m.lenOfEdges0
     thetas0 = m.angleOfEdges0
@@ -134,6 +129,18 @@ function internal_forces!(forces, m, E2d, kb, ke, d, areas, thetas, normals, pot
             forces[:,v4] = forces[:,v4] + b12.*tvec1 + b22.*tvec2
 
             potenergy[1] += kb * (1 - cos(thetas[i] - thetas0[i]))
+
+            # damping
+            v1, v2 = m.vertOfEdge[:,i]
+            vel1[:] = v[:, v1]
+            vel2[:] = v[:, v2]
+            forces[:, v1] = forces[:, v1] - visc .* (vel1 - vel2)
+            
+            if (any(isnan, forces))
+                println("IS NAN, i=", i)
+                exit()
+            end
+ 
         end
     end
 
@@ -158,13 +165,14 @@ end
 
 function main()
 T = Float64
-dt::T = 1.e-4       # time step [s]
-tprint = 0.005      # save file time step [s]
-density = 1060*1.5  # mass density of surface [kg / m^3]
-E = 1.e5            # young modulus [Pa]
+dt::T = 2e-5        # time step [s]
+tprint = 1e-3       # save file time step [s]
+density = 1.5       # mass density of surface [kg / m^3]
+E = 719             # young modulus [Pa]
 #E = 0.              # young modulus [Pa]
-B = 0.01            # bending modulus
-thickness = 0.002   # thickness of the surface [m]
+B = 0.325           # bending modulus
+visc = 0.35         # damping coefficient
+thickness = 0.0741  # thickness of the surface [m]
 E2d = E*thickness
 kb = B * 2. / sqrt(3.)
 nsteps = 10000
@@ -181,7 +189,7 @@ pnormals = myMesh.cell_array_to_point_array(m.triaNormals0, m)
 pnormals = pnormals ./ sqrt.(sum(pnormals.^2., dims=1))
 IO.writeSurface("prova_orig", m.xyzOfVert, m.vertOfTria)
 
-m2 = expand_mesh(m, pnormals, 0.0005)
+m2 = expand_mesh(m, pnormals, 0.0015)
 forces = zeros(T, (3,m2.nv))
 ke = zeros(T, m.ne) 
 strains = zeros(T, m2.ne)
@@ -189,6 +197,7 @@ a = zeros(T,(3,m2.nv))
 am = zeros(T,(3,m2.nv))
 v = zeros(T,(3,m2.nv))
 d = zeros(eltype(forces), m.ne)
+d0 = deepcopy(m.lenOfEdges0)
 areas = zeros(T,m2.nt)
 normals = zeros(T,(3,m2.nt))
 thetas = zeros(T,m2.ne)
@@ -206,11 +215,11 @@ for i=0:nsteps
 
     rms_v = sqrt.(sum(abs2.(v), dims=2) ./ size(v,2)) 
     a_mean = sum(a, dims=2) / size(a, 2)
-    internal_forces!(forces, m2, E2d, kb, ke, d, areas, thetas, normals, potenergy, tmp)
+    internal_forces!(forces, m2, E2d, kb, visc, ke, d, areas, thetas, normals, v, potenergy, tmp)
     tot_force = sum(forces, dims=2)
     compute_kenergy!(kenergy, v, mass)
-    compute_strains!(strains, d, m2)
-    a = forces ./ mass
+    strains[:] = (d[:] - d0[:]) ./ d[:]
+    a[:,:] = forces ./ mass
 
     # write files if necessary
     if mod(i*dt, tprint) < dt
@@ -224,7 +233,7 @@ for i=0:nsteps
     end
 
     # compute stats
-    @printf "---- t = %6.3f  i = %5d\n" dt*i  i
+    @printf "---- t = %7.4f  i = %5d\n" dt*i  i
     @printf "  rms strain   %.7e\n" sqrt(sum(strains.^2.) / size(strains,1))
     @printf "  rms dtheta   %.7e\n" sqrt(sum(dtheta.^2.) / size(dtheta,1))
     @printf "  tot force    %10.3e %10.3e %10.3e\n" tot_force[1] tot_force[2] tot_force[3]

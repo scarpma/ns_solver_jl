@@ -333,23 +333,21 @@ end
 function edgeArrayToTriaArray(m::SurfaceMesh, arr)
     T = eltype(m.xyzOfVert)
     newArr = zeros(T, m.nt)
-    for i=1:m.ne
-        t1, t2 = m.triaOfEdge[:,i]
-        newArr[t1] += arr[i]
-        if m.nTriaOfEdge[i] > 1
-            newArr[t2] += arr[i]
-        end
+    for i=1:m.nt
+        e1, e2, e3 = m.edgeOfTria[:,i]
+        newArr[i] = arr[e1]
+        newArr[i] += arr[e2]
+        newArr[i] += arr[e3]
     end
     newArr = newArr ./ 3.
     return newArr
 end
-function edgeArrayToTriaArray!(newArr, m::SurfaceMesh, arr)
-    for i=1:m.ne
-        t1, t2 = m.triaOfEdge[:,i]
-        newArr[t1] += arr[i]
-        if m.nTriaOfEdge[i] > 1
-            newArr[t2] += arr[i]
-        end
+function edgeArrayToTriaArray!(newArr,m::SurfaceMesh, arr)
+    for i=1:m.nt
+        e1, e2, e3 = m.edgeOfTria[:,i]
+        newArr[i] = arr[e1]
+        newArr[i] += arr[e2]
+        newArr[i] += arr[e3]
     end
     newArr = newArr ./ 3.
 end
